@@ -2,29 +2,58 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, LockKeyhole, LogIn, Mail } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Mail,
+  User,
+  UserPlus,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LoginForm() {
+export default function RegisterForm() {
   const router = useRouter();
 
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setLoading(true);
     setError("");
+
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
+    setLoading(true);
 
     const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          name,
+        },
+      },
     });
 
     if (error) {
@@ -33,12 +62,46 @@ export default function LoginForm() {
       return;
     }
 
-    router.push("/businesses");
-    router.refresh();
+    if (data.session) {
+      router.push("/businesses");
+      router.refresh();
+      return;
+    }
+
+    router.push("/login");
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Nombre */}
+      <div>
+        <label
+          htmlFor="name"
+          className="mb-2 block text-sm font-medium text-[#dce8eb]"
+        >
+          Nombre
+        </label>
+
+        <div className="group relative">
+          <User
+            size={18}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#68858e] transition-colors group-focus-within:text-[#13d6b5]"
+          />
+
+          <input
+            id="name"
+            name="name"
+            type="text"
+            autoComplete="name"
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Tu nombre"
+            className="w-full rounded-lg border border-[#17424c] bg-[#061f29] py-3 pl-11 pr-4 text-sm text-white outline-none transition-all duration-200 placeholder:text-[#56737c] hover:border-[#24606b] focus:border-[#13d6b5]/70 focus:shadow-[0_0_0_3px_rgba(19,214,181,0.08)]"
+          />
+        </div>
+      </div>
+
       {/* Correo */}
       <div>
         <label
@@ -87,11 +150,12 @@ export default function LoginForm() {
             id="password"
             name="password"
             type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
+            autoComplete="new-password"
             required
+            minLength={6}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="••••••••"
+            placeholder="Mínimo 6 caracteres"
             className="w-full rounded-lg border border-[#17424c] bg-[#061f29] py-3 pl-11 pr-12 text-sm text-white outline-none transition-all duration-200 placeholder:text-[#56737c] hover:border-[#24606b] focus:border-[#13d6b5]/70 focus:shadow-[0_0_0_3px_rgba(19,214,181,0.08)]"
           />
 
@@ -104,6 +168,46 @@ export default function LoginForm() {
             }
           >
             {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Confirmar contraseña */}
+      <div>
+        <label
+          htmlFor="confirmPassword"
+          className="mb-2 block text-sm font-medium text-[#dce8eb]"
+        >
+          Confirmar contraseña
+        </label>
+
+        <div className="group relative">
+          <Check
+            size={18}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#68858e] transition-colors group-focus-within:text-[#13d6b5]"
+          />
+
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type={showConfirmPassword ? "text" : "password"}
+            autoComplete="new-password"
+            required
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Repite tu contraseña"
+            className="w-full rounded-lg border border-[#17424c] bg-[#061f29] py-3 pl-11 pr-12 text-sm text-white outline-none transition-all duration-200 placeholder:text-[#56737c] hover:border-[#24606b] focus:border-[#13d6b5]/70 focus:shadow-[0_0_0_3px_rgba(19,214,181,0.08)]"
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowConfirmPassword((current) => !current)}
+            className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center justify-center rounded-md p-1.5 text-[#68858e] transition-colors hover:bg-[#0b3039] hover:text-[#13d6b5]"
+            aria-label={
+              showConfirmPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+            }
+          >
+            {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
           </button>
         </div>
       </div>
@@ -124,12 +228,12 @@ export default function LoginForm() {
         {loading ? (
           <>
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            Ingresando...
+            Creando cuenta...
           </>
         ) : (
           <>
-            Iniciar sesión
-            <LogIn
+            Crear mi cuenta
+            <UserPlus
               size={17}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
             />
