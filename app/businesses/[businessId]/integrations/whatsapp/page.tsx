@@ -1,3 +1,4 @@
+import WhatsAppEmbeddedSignup from "./WhatsAppEmbeddedSignup";
 import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
@@ -77,12 +78,7 @@ export default async function WhatsAppPage({ params }: WhatsAppPageProps) {
             </p>
           </div>
 
-          <button
-            type="button"
-            className="mt-6 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-gray-200"
-          >
-            Continuar con Meta
-          </button>
+          <WhatsAppEmbeddedSignup businessId={businessId} />
         </section>
       ) : (
         <section className="mt-10 max-w-3xl rounded-xl border border-gray-800 bg-gray-950 p-6">
