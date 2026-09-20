@@ -50,6 +50,7 @@ export default function RegisterForm() {
       email,
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: {
           name,
         },
@@ -68,7 +69,7 @@ export default function RegisterForm() {
       return;
     }
 
-    router.push("/login");
+    router.push("/check-email");
   }
 
   return (

@@ -14,10 +14,10 @@ export default async function BusinessLayout({
   const { businessId } = await params;
 
   return (
-    <div className="min-h-screen bg-[#070708] text-white">
+    <div className="min-h-screen bg-[#031c26] text-white">
       <BusinessSidebar businessId={businessId} />
 
-      <div className="ml-64 min-h-screen">
+      <div className="ml-64 min-h-screen bg-[#031c26]">
         <div className="mx-auto w-full max-w-[1600px] px-8 py-8 lg:px-10">
           {children}
         </div>
