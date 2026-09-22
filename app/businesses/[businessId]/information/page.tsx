@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import FormPendingOverlay from "@/components/ui/FormPendingOverlay";
 import { createClient } from "@/lib/supabase/server";
 import { updateBusiness } from "./actions";
 
@@ -62,6 +63,8 @@ export default async function InformationPage({
             action={updateBusiness}
             className="mt-10 rounded-xl border border-gray-800 bg-gray-950 p-6"
           >
+            <FormPendingOverlay />
+
             <input type="hidden" name="businessId" value={businessId} />
 
             <div>

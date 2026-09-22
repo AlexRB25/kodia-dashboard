@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, LockKeyhole, LogIn, Mail } from "lucide-react";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
@@ -39,6 +40,8 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+      {loading && <LoadingOverlay />}
+
       {/* Correo */}
       <div>
         <label

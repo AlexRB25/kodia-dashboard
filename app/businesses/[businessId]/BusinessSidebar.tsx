@@ -7,7 +7,9 @@ import {
   ArrowLeftRight,
   Bot,
   ContactRound,
+  Coins,
   LayoutDashboard,
+  LifeBuoy,
   MessageCircle,
   Plug,
   Settings,
@@ -42,6 +44,16 @@ const menuItems = [
     name: "Integraciones",
     path: "/integrations",
     icon: Plug,
+  },
+  {
+    name: "Plan y créditos",
+    path: "/billing",
+    icon: Coins,
+  },
+  {
+    name: "Soporte",
+    path: "/support",
+    icon: LifeBuoy,
   },
   {
     name: "Configuración",

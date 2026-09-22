@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { ArrowRight, Building2, BriefcaseBusiness } from "lucide-react";
 
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 import { createBusiness } from "../../actions/createBusiness";
 
 export default function CreateBusinessForm() {
@@ -39,6 +40,8 @@ export default function CreateBusinessForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {loading && <LoadingOverlay />}
+
       {/* Nombre del negocio */}
       <div>
         <label

@@ -11,6 +11,7 @@ import {
   User,
   UserPlus,
 } from "lucide-react";
+import LoadingOverlay from "@/components/ui/LoadingOverlay";
 import { createClient } from "@/lib/supabase/client";
 
 export default function RegisterForm() {
@@ -74,6 +75,8 @@ export default function RegisterForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {loading && <LoadingOverlay />}
+
       {/* Nombre */}
       <div>
         <label

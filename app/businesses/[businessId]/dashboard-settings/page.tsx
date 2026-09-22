@@ -1,13 +1,9 @@
 import Link from "next/link";
-import {
-  ArrowLeft,
-  BarChart3,
-  CircleDollarSign,
-  MessageCircle,
-  PackageX,
-  ReceiptText,
-  ShoppingBag,
-} from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+
+import { getDashboardWidgetState } from "@/lib/dashboard/preferences";
+import { createClient } from "@/lib/supabase/server";
 import DashboardWidgetSettings from "./DashboardWidgetSettings";
 
 type DashboardSettingsPageProps = {
@@ -16,62 +12,42 @@ type DashboardSettingsPageProps = {
   }>;
 };
 
-const widgets = [
-  {
-    id: "sales_summary",
-    name: "Ventas",
-    description: "Consulta las ventas del periodo seleccionado.",
-    icon: CircleDollarSign,
-    enabled: true,
-  },
-  {
-    id: "orders",
-    name: "Pedidos",
-    description: "Consulta rápidamente los pedidos recibidos.",
-    icon: ReceiptText,
-    enabled: true,
-  },
-  {
-    id: "conversations",
-    name: "Conversaciones",
-    description: "Mensajes, comentarios y preguntas pendientes de tus canales.",
-    icon: MessageCircle,
-    enabled: true,
-  },
-  {
-    id: "average_ticket",
-    name: "Ticket promedio",
-    description: "Consulta el valor promedio de tus ventas.",
-    icon: ShoppingBag,
-    enabled: true,
-  },
-  {
-    id: "sales_chart",
-    name: "Gráfica de ventas",
-    description: "Visualiza el comportamiento de tus ventas en el tiempo.",
-    icon: BarChart3,
-    enabled: true,
-  },
-  {
-    id: "sales_by_channel",
-    name: "Ventas por canal",
-    description: "Compara las ventas generadas por cada uno de tus canales.",
-    icon: BarChart3,
-    enabled: true,
-  },
-  {
-    id: "out_of_stock",
-    name: "Productos sin existencia",
-    description: "Detecta productos que requieren atención de inventario.",
-    icon: PackageX,
-    enabled: true,
-  },
-];
-
 export default async function DashboardSettingsPage({
   params,
 }: DashboardSettingsPageProps) {
   const { businessId } = await params;
+  const supabase = await createClient();
+
+  // 1. Obtener usuario autenticado
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // 2. Membresía y widgets activados: consultas independientes, en paralelo
+  const [{ data: membership, error: membershipError }, widgets] =
+    await Promise.all([
+      supabase
+        .from("business_members")
+        .select("business_id")
+        .eq("business_id", businessId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle(),
+      getDashboardWidgetState(supabase, businessId, user.id),
+    ]);
+
+  if (membershipError) {
+    console.error("Error checking membership:", membershipError);
+  }
+
+  // 3. El usuario debe pertenecer al negocio
+  if (!membership) {
+    notFound();
+  }
 
   return (
     <main className="min-h-screen text-white">
@@ -107,7 +83,10 @@ export default async function DashboardSettingsPage({
             </p>
           </div>
 
-          <DashboardWidgetSettings />
+          <DashboardWidgetSettings
+            businessId={businessId}
+            initialWidgets={widgets}
+          />
 
           <div className="mt-8 flex items-center justify-end gap-3 border-t border-[#17424c] pt-6">
             <Link

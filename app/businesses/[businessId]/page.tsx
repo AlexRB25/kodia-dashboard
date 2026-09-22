@@ -1,13 +1,20 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import {
-  ArrowRight,
-  CircleDollarSign,
-  MessageCircle,
-  ReceiptText,
-  ShoppingBag,
-} from "lucide-react";
+import { ArrowRight, MessageCircle, ShoppingBag } from "lucide-react";
 
+import PlanPill from "@/components/billing/PlanPill";
+import { ChannelRow } from "@/components/dashboard/cards";
+import {
+  SalesByChannelCard,
+  SalesByChannelFallback,
+  SalesChartCard,
+  SalesChartFallback,
+  SummaryMetrics,
+  SummaryMetricsFallback,
+  SyncStatus,
+} from "@/components/dashboard/MetricsSections";
+import { getDashboardWidgetState } from "@/lib/dashboard/preferences";
 import { createClient } from "@/lib/supabase/server";
 
 type BusinessPageProps = {
@@ -38,29 +45,36 @@ export default async function BusinessPage({ params }: BusinessPageProps) {
     redirect("/login");
   }
 
-  // 2. Comprobar que el usuario pertenece al negocio
-  const { data: membership, error: membershipError } = await supabase
-    .from("business_members")
-    .select("business_id")
-    .eq("business_id", businessId)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
+  // 2. Membresía, negocio y widgets visibles: consultas independientes,
+  //    se lanzan en paralelo para no sumar la latencia de cada una.
+  const [
+    { data: membership, error: membershipError },
+    { data: business, error: businessError },
+    widgets,
+  ] = await Promise.all([
+    supabase
+      .from("business_members")
+      .select("business_id")
+      .eq("business_id", businessId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("businesses")
+      .select("id, account_id, name, business_type, status")
+      .eq("id", businessId)
+      .maybeSingle(),
+    getDashboardWidgetState(supabase, businessId, user.id),
+  ]);
 
   if (membershipError) {
     console.error("Error checking membership:", membershipError);
   }
 
+  // 3. El usuario debe pertenecer al negocio
   if (!membership) {
     notFound();
   }
-
-  // 3. Obtener información del negocio
-  const { data: business, error: businessError } = await supabase
-    .from("businesses")
-    .select("id, name, business_type, status")
-    .eq("id", businessId)
-    .maybeSingle();
 
   if (businessError) {
     console.error("Error loading business:", businessError);
@@ -72,6 +86,15 @@ export default async function BusinessPage({ params }: BusinessPageProps) {
 
   const businessType =
     businessTypeLabels[business.business_type] ?? business.business_type;
+
+  const showSummary =
+    widgets.sales_summary ||
+    widgets.orders ||
+    widgets.conversations ||
+    widgets.average_ticket;
+  const showActivity = widgets.sales_chart || widgets.sales_by_channel;
+  const showAttention = widgets.conversations || widgets.out_of_stock;
+  const hasVisibleWidgets = showSummary || showActivity || showAttention;
 
   return (
     <main className="min-h-screen text-white">
@@ -101,7 +124,15 @@ export default async function BusinessPage({ params }: BusinessPageProps) {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Suspense fallback={null}>
+                <SyncStatus businessId={businessId} />
+              </Suspense>
+
+              <Suspense fallback={null}>
+                <PlanPill businessId={businessId} accountId={business.account_id} />
+              </Suspense>
+
               <Link
                 href={`/businesses/${businessId}/dashboard-settings`}
                 className="rounded-lg border border-[#17424c] bg-[#061f29] px-4 py-2 text-sm font-medium text-[#b6cbd1] transition hover:border-[#13d6b5]/40 hover:text-[#13d6b5]"
@@ -125,204 +156,144 @@ export default async function BusinessPage({ params }: BusinessPageProps) {
 
         <div className="my-8 border-t border-[#17424c]" />
 
+        {!hasVisibleWidgets && (
+          <div className="rounded-xl border border-dashed border-[#17424c] bg-[#062630] px-6 py-14 text-center">
+            <p className="text-sm font-medium text-[#c4d5da]">
+              Tu dashboard no tiene widgets visibles
+            </p>
+
+            <p className="mt-1 text-xs text-[#68858e]">
+              Activa los que necesites desde la configuración.
+            </p>
+
+            <Link
+              href={`/businesses/${businessId}/dashboard-settings`}
+              className="mt-5 inline-flex rounded-lg bg-[#08b89d] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0cc9ab]"
+            >
+              Personalizar dashboard
+            </Link>
+          </div>
+        )}
+
         {/* Resumen */}
-        <section>
-          <div>
-            <h2 className="text-lg font-semibold text-white">Resumen</h2>
-            <p className="mt-1 text-sm text-[#68858e]">
-              Vista rápida de la actividad de hoy.
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              title="Ventas hoy"
-              value="$0.00"
-              detail="Sin datos todavía"
-              icon={<CircleDollarSign size={20} />}
-            />
-
-            <MetricCard
-              title="Pedidos hoy"
-              value="0"
-              detail="Sin pedidos registrados"
-              icon={<ReceiptText size={20} />}
-            />
-
-            <MetricCard
-              title="Conversaciones"
-              value="0"
-              detail="0 pendientes"
-              icon={<MessageCircle size={20} />}
-            />
-
-            <MetricCard
-              title="Ticket promedio"
-              value="$0.00"
-              detail="Basado en ventas de hoy"
-              icon={<ShoppingBag size={20} />}
-            />
-          </div>
-        </section>
-
-        {/* Actividad */}
-        <section className="mt-8 grid gap-4 xl:grid-cols-3">
-          {/* Ventas */}
-          <div className="rounded-xl border border-[#17424c] bg-[#062630] p-6 xl:col-span-2">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="font-semibold text-white">Ventas</h2>
-                <p className="mt-1 text-sm text-[#68858e]">
-                  Rendimiento de ventas del periodo seleccionado.
-                </p>
-              </div>
-
-              <span className="text-xs text-[#68858e]">Hoy</span>
-            </div>
-
-            <div className="flex min-h-[220px] items-center justify-center">
-              <div className="text-center">
-                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
-                  <CircleDollarSign size={21} />
-                </div>
-
-                <p className="mt-4 text-sm font-medium text-[#c4d5da]">
-                  Aún no hay ventas para mostrar
-                </p>
-
-                <p className="mt-1 text-xs text-[#68858e]">
-                  Aquí aparecerá el comportamiento de tus ventas.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Ventas por canal */}
-          <div className="rounded-xl border border-[#17424c] bg-[#062630] p-6">
-            <h2 className="font-semibold text-white">Ventas por canal</h2>
-
-            <p className="mt-1 text-sm text-[#68858e]">
-              Distribución de tus ventas.
-            </p>
-
-            <div className="mt-6 space-y-3">
-              <ChannelRow name="TikTok Shop" value="$0.00" />
-              <ChannelRow name="Mercado Libre" value="$0.00" />
-              <ChannelRow name="Tienda" value="$0.00" />
-            </div>
-
-            <Link
-              href={`/businesses/${businessId}/integrations`}
-              className="mt-6 flex items-center justify-between border-t border-[#17424c] pt-4 text-sm text-[#8fb3bc] transition hover:text-[#13d6b5]"
-            >
-              Administrar canales
-              <ArrowRight size={16} />
-            </Link>
-          </div>
-        </section>
-
-        {/* Atención e inventario */}
-        <section className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-[#17424c] bg-[#062630] p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="font-semibold text-white">
-                  Conversaciones pendientes
-                </h2>
-
-                <p className="mt-1 text-sm text-[#68858e]">
-                  Mensajes que requieren atención.
-                </p>
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
-                <MessageCircle size={19} />
-              </div>
-            </div>
-
-            <div className="mt-6 space-y-2">
-              <ChannelRow name="WhatsApp" value="0" />
-              <ChannelRow name="Instagram" value="0" />
-              <ChannelRow name="Facebook" value="0" />
-              <ChannelRow name="TikTok" value="0" />
-              <ChannelRow name="Mercado Libre" value="0" />
-            </div>
-
-            <Link
-              href={`/businesses/${businessId}/conversations`}
-              className="mt-6 flex items-center justify-between border-t border-[#17424c] pt-4 text-sm text-[#8fb3bc] transition hover:text-[#13d6b5]"
-            >
-              Ver conversaciones
-              <ArrowRight size={16} />
-            </Link>
-          </div>
-
-          <div className="rounded-xl border border-[#17424c] bg-[#062630] p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="font-semibold text-white">
-                  Productos sin existencia
-                </h2>
-
-                <p className="mt-1 text-sm text-[#68858e]">
-                  Productos que requieren atención.
-                </p>
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
-                <ShoppingBag size={19} />
-              </div>
-            </div>
-
-            <div className="flex min-h-[105px] items-center justify-center">
-              <p className="text-sm text-[#68858e]">
-                No hay productos sin existencia.
+        {showSummary && (
+          <section>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Resumen</h2>
+              <p className="mt-1 text-sm text-[#68858e]">
+                Vista rápida de la actividad de hoy.
               </p>
             </div>
-          </div>
-        </section>
+
+            <Suspense fallback={<SummaryMetricsFallback />}>
+              <SummaryMetrics businessId={businessId} show={widgets} />
+            </Suspense>
+          </section>
+        )}
+
+        <div className={`space-y-4 ${showSummary ? "mt-8" : ""}`}>
+          {/* Actividad */}
+          {showActivity && (
+            <section className="grid gap-4 xl:grid-cols-3">
+              {/* Ventas */}
+              {widgets.sales_chart && (
+                <Suspense fallback={<SalesChartFallback wide={!widgets.sales_by_channel} />}>
+                  <SalesChartCard
+                    businessId={businessId}
+                    wide={!widgets.sales_by_channel}
+                  />
+                </Suspense>
+              )}
+
+              {/* Ventas por canal */}
+              {widgets.sales_by_channel && (
+                <Suspense fallback={<SalesByChannelFallback wide={!widgets.sales_chart} />}>
+                  <SalesByChannelCard
+                    businessId={businessId}
+                    wide={!widgets.sales_chart}
+                  />
+                </Suspense>
+              )}
+            </section>
+          )}
+
+          {/* Atención e inventario */}
+          {showAttention && (
+            <section className="grid gap-4 lg:grid-cols-2">
+              {widgets.conversations && (
+                <div
+                  className={`rounded-xl border border-[#17424c] bg-[#062630] p-6 ${
+                    widgets.out_of_stock ? "" : "lg:col-span-2"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-semibold text-white">
+                        Conversaciones pendientes
+                      </h2>
+
+                      <p className="mt-1 text-sm text-[#68858e]">
+                        Mensajes que requieren atención.
+                      </p>
+                    </div>
+
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
+                      <MessageCircle size={19} />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 space-y-2">
+                    <ChannelRow name="WhatsApp" value="0" />
+                    <ChannelRow name="Instagram" value="0" />
+                    <ChannelRow name="Facebook" value="0" />
+                    <ChannelRow name="TikTok" value="0" />
+                    <ChannelRow name="Mercado Libre" value="0" />
+                  </div>
+
+                  <Link
+                    href={`/businesses/${businessId}/conversations`}
+                    className="mt-6 flex items-center justify-between border-t border-[#17424c] pt-4 text-sm text-[#8fb3bc] transition hover:text-[#13d6b5]"
+                  >
+                    Ver conversaciones
+                    <ArrowRight size={16} />
+                  </Link>
+                </div>
+              )}
+
+              {widgets.out_of_stock && (
+                <div
+                  className={`rounded-xl border border-[#17424c] bg-[#062630] p-6 ${
+                    widgets.conversations ? "" : "lg:col-span-2"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="font-semibold text-white">
+                        Productos sin existencia
+                      </h2>
+
+                      <p className="mt-1 text-sm text-[#68858e]">
+                        Productos que requieren atención.
+                      </p>
+                    </div>
+
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
+                      <ShoppingBag size={19} />
+                    </div>
+                  </div>
+
+                  <div className="flex min-h-[105px] items-center justify-center">
+                    <p className="text-sm text-[#68858e]">
+                      No hay productos sin existencia.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
       </div>
     </main>
   );
 }
 
-function MetricCard({
-  title,
-  value,
-  detail,
-  icon,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-[#17424c] bg-[#062630] p-5 transition duration-200 hover:border-[#24606b]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-[#7ea5af]">{title}</p>
-
-          <p className="mt-3 text-2xl font-bold tracking-tight text-white">
-            {value}
-          </p>
-        </div>
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#13d6b5]/20 bg-[#13d6b5]/5 text-[#13d6b5]">
-          {icon}
-        </div>
-      </div>
-
-      <p className="mt-4 text-xs text-[#68858e]">{detail}</p>
-    </div>
-  );
-}
-
-function ChannelRow({ name, value }: { name: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg border border-[#17424c]/70 bg-[#031c26]/60 px-4 py-3">
-      <span className="text-sm text-[#9db9c0]">{name}</span>
-      <span className="text-sm font-medium text-white">{value}</span>
-    </div>
-  );
-}
