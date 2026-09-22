@@ -1,5 +1,6 @@
 "use server";
 
+import { createBusinessWithAccount } from "@/lib/businesses/create";
 import { createClient } from "@/lib/supabase/server";
 
 type CreateBusinessInput = {
@@ -35,22 +36,27 @@ export async function createBusiness({
     };
   }
 
-const { data, error } = await supabase.rpc("create_business", {
-  business_name: cleanBusinessName,
-  business_type: cleanBusinessType,
-});
+  // Nombre de la cuenta si es un usuario nuevo: el que dio al registrarse, o el del negocio
+  const registeredName =
+    typeof user.user_metadata?.name === "string" ? user.user_metadata.name.trim() : "";
 
-  if (error) {
-    console.error("Error creating business:", error);
+  const result = await createBusinessWithAccount(supabase, {
+    businessName: cleanBusinessName,
+    businessType: cleanBusinessType,
+    accountName: (registeredName || cleanBusinessName).slice(0, 100),
+  });
+
+  if (!result.success) {
+    console.error("Error creating business:", result.error);
 
     return {
       success: false,
-      error: error.message,
+      error: result.error,
     };
   }
 
   return {
     success: true,
-    data,
+    data: result.data,
   };
 }
